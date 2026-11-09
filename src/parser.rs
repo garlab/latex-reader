@@ -1587,9 +1587,7 @@ impl<'a> Parser<'a> {
                 self.star();
                 let first = self.optional();
                 let second = self.optional();
-                let note = second
-                    .or(first)
-                    .map(|(n, _)| n.as_str().trim().replace('~', "\u{a0}"));
+                let note = second.or(first).map(|(n, _)| note_text(n.as_str()));
                 if let Some((keys, _)) = self.group() {
                     if !body {
                         return;
@@ -3074,6 +3072,11 @@ impl<'a> Parser<'a> {
             }),
             range,
         );
+        if display {
+            // TeX ignores spaces after a display, as after a line break.
+            self.st.para.space = None;
+            self.st.para.content = false;
+        }
     }
 
     /// Applies `\gdef` and similar definitions found inside a formula.
@@ -3322,4 +3325,57 @@ impl<'a> Parser<'a> {
         self.cancel = Some(cancel);
         self.next_cancel = self.pos;
     }
+}
+
+/// Converts a short text argument, such as a citation note, without events:
+/// symbols and ligatures become characters, groups disappear, and other
+/// commands stay as written.
+fn note_text(note: &str) -> String {
+    let note = note.trim();
+    let mut out = String::with_capacity(note.len());
+    let mut chars = note.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        match c {
+            '{' | '}' => {}
+            '~' => out.push('\u{a0}'),
+            '\\' => {
+                let start = i + 1;
+                let mut end = start;
+                while let Some(&(j, d)) = chars.peek() {
+                    if !d.is_ascii_alphabetic() {
+                        break;
+                    }
+                    end = j + d.len_utf8();
+                    chars.next();
+                }
+                if end == start {
+                    let Some((_, d)) = chars.next() else {
+                        out.push('\\');
+                        break;
+                    };
+                    let name = &note[start..start + d.len_utf8()];
+                    match commands::symbol(name) {
+                        Some(text) => out.push_str(text),
+                        None => {
+                            out.push('\\');
+                            out.push(d);
+                        }
+                    }
+                    continue;
+                }
+                let name = &note[start..end];
+                match commands::command(name).map(|spec| spec.cmd) {
+                    Some(Cmd::Symbol(text)) => {
+                        out.push_str(text);
+                        while chars.peek().is_some_and(|&(_, d)| d.is_whitespace()) {
+                            chars.next();
+                        }
+                    }
+                    _ => out.push_str(&note[i..end]),
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    text::ligatures(&out).into_owned()
 }

@@ -356,6 +356,14 @@ fn citations_resolve_against_the_bibliography() {
 \bibitem{a} First. \bibitem[X]{b} Second.
 \end{thebibliography}";
     assert!(text(source).starts_with("See [1, X, p.\u{a0}2]."));
+    let source = r"See \cite[\S 3.1, pp.~3--5 \unknown]{a}.";
+    assert_eq!(text(source), "See [a, §3.1, pp.\u{a0}3–5 \\unknown].\n");
+}
+
+#[test]
+fn spaces_after_a_display_are_ignored() {
+    let source = "Before\n\\[ x \\]\n after \\begin{equation*}\ny\n\\end{equation*}  again.";
+    assert_eq!(text(source), "Before $ x $after $\ny\n$again.\n");
 }
 
 fn assert_windows_match(source: &str, options: Options) -> Index {
