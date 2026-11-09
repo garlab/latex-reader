@@ -888,7 +888,9 @@ impl<'a> Parser<'a> {
     fn line_break(&mut self, range: Range<usize>) {
         if self.st.para.open {
             self.emit(Event::LineBreak, range);
+            // Spaces after a line break are dropped, as in TeX.
             self.st.para.space = None;
+            self.st.para.content = false;
         }
     }
 

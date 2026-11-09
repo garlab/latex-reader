@@ -489,3 +489,20 @@ fn cancellation_stops_the_first_pass_and_windows() {
     assert!(events.next().is_none());
     assert!(events.cancelled());
 }
+
+#[test]
+fn author_blocks_keep_names_and_thanks_as_footnotes() {
+    let source = r"\title{T}\author{A\thanks{Equal.}\\ Lab \And B\footnotemark[1]}
+\begin{document}\maketitle\end{document}";
+    let index = build(source);
+    let all = events(&index, source);
+    assert!(
+        !all.iter().any(|s| matches!(s.event, Event::Raw(_))),
+        "{all:?}"
+    );
+    assert!(
+        all.iter()
+            .any(|s| matches!(&s.event, Event::Start(Tag::Footnote { number: None })))
+    );
+    assert!(text(source).contains("Equal."));
+}

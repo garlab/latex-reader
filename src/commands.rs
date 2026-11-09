@@ -323,7 +323,9 @@ pub(crate) fn command(name: &str) -> Option<Spec> {
         | "parencite" | "textcite" | "autocite" | "footcite" | "Cite" | "Citep" | "Citet" => {
             spec(Special(S::Cite), "")
         }
-        "footnote" => spec(Special(S::Footnote), ""),
+        "footnote" | "thanks" => spec(Special(S::Footnote), ""),
+        // A mark for a footnote given elsewhere; the text is not repeated.
+        "footnotemark" => spec(Invisible, "o"),
         "href" => spec(Special(S::Href), ""),
         "url" | "nolinkurl" => spec(Special(S::Url), ""),
         "includegraphics" => spec(Special(S::IncludeGraphics), ""),
@@ -332,7 +334,7 @@ pub(crate) fn command(name: &str) -> Option<Spec> {
         "title" => spec(Special(S::Title), ""),
         "author" => spec(Special(S::Author), ""),
         "date" => spec(Special(S::Date), ""),
-        "and" | "AND" => spec(Special(S::And), ""),
+        "and" | "AND" | "And" => spec(Special(S::And), ""),
         "verb" => spec(Special(S::Verb), ""),
         "lstinline" => spec(Special(S::LstInline), ""),
         "mintinline" => spec(Special(S::MintInline), ""),
