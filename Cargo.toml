@@ -1,0 +1,19 @@
+[package]
+name = "latex-preview"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+description = "Fast, approximate reading of LaTeX documents: semantic events with source ranges, scoped macros, numbering and resumable checkpoints."
+license = "MIT"
+keywords = ["latex", "tex", "preview", "parser"]
+categories = ["parser-implementations", "text-processing"]
+publish = false
+
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
