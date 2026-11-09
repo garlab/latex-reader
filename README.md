@@ -1,5 +1,8 @@
 # latex-reader
 
+[crates.io](https://crates.io/crates/latex-reader) ·
+[API documentation](https://docs.rs/latex-reader)
+
 Reads LaTeX documents into a stream of semantic events with source ranges:
 headings, paragraphs, lists, theorems, tables, figures, footnotes, references,
 citations, code, and formulas prepared for [KaTeX](https://katex.org). It applies
@@ -19,6 +22,14 @@ running a TeX engine:
 Reading never fails. Unknown commands and environments stay visible as source
 and are reported as diagnostics. The crate has no dependencies, does not render,
 and reads no files itself.
+
+## Installation
+
+```sh
+cargo add latex-reader
+```
+
+The crate has no dependencies and requires Rust 1.90 or newer.
 
 ## Example
 
@@ -146,7 +157,12 @@ marked uncertain rather than silently wrong.
 latex-reader trades exactness for speed and robustness: it approximates what
 LaTeX computes, keeps every source position, and leaves layout to you.
 
-## Requirements and license
+## Used by
 
-Rust 1.90 or newer. MIT; see [LICENSE](LICENSE). To work on the crate, see
+[gloss](https://github.com/garlab/gloss), a terminal viewer, renders `.tex`
+files with this crate.
+
+## License
+
+MIT; see [LICENSE](LICENSE). To work on the crate, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
