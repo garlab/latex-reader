@@ -9,7 +9,7 @@ use std::{
 use crate::{
     diagnostics::{DiagnosticKind, Diagnostics},
     event::{Event, Spanned, Tag, TagKind},
-    macros::Store,
+    macros::{MacroContext, Store},
     numbering::Registry,
     parser::{Ctx, Parser, Phase, State},
 };
@@ -296,6 +296,11 @@ impl Index {
     /// The offset where indexing stopped at the checkpoint cap.
     pub fn stopped(&self) -> Option<usize> {
         self.stopped
+    }
+
+    /// The macro bindings visible at `offset`, as a formula there sees them.
+    pub fn macro_context(&self, offset: usize) -> MacroContext {
+        MacroContext::at(&self.store, offset)
     }
 
     /// What `\ref` gives for a label.
