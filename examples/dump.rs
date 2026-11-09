@@ -4,7 +4,7 @@
 
 use std::sync::atomic::AtomicBool;
 
-use latex_preview::{Event, Options};
+use latex_reader::{Event, Options};
 
 fn main() {
     let path = std::env::args().nth(1).expect("a .tex file");
@@ -14,7 +14,7 @@ fn main() {
     let dir = path.parent().unwrap_or(std::path::Path::new(""));
     let jobname = path.file_stem().and_then(|s| s.to_str());
     let mut read = |name: &str, _| std::fs::read_to_string(dir.join(name)).ok();
-    let expanded = latex_preview::expand(&source, jobname, &Default::default(), &mut read);
+    let expanded = latex_reader::expand(&source, jobname, &Default::default(), &mut read);
     if !expanded.files.is_empty() || !expanded.missing.is_empty() {
         eprintln!(
             "included {:?}, missing {:?}",
@@ -22,7 +22,7 @@ fn main() {
         );
     }
     let source = expanded.text;
-    let index = latex_preview::index(&source, &Options::default(), &AtomicBool::new(false))
+    let index = latex_reader::index(&source, &Options::default(), &AtomicBool::new(false))
         .expect("not cancelled");
     let mut depth = 0usize;
     for spanned in index.events(&source) {

@@ -1,6 +1,6 @@
 use std::sync::atomic::AtomicBool;
 
-use latex_preview::{DiagnosticKind, Event, Index, Limits, Options, Spanned, Tag, TagKind, index};
+use latex_reader::{DiagnosticKind, Event, Index, Limits, Options, Spanned, Tag, TagKind, index};
 
 fn build(source: &str) -> Index {
     build_with(source, Options::default())
@@ -36,7 +36,7 @@ fn text(source: &str) -> String {
     out
 }
 
-fn maths<'a>(index: &'a Index, source: &'a str) -> Vec<latex_preview::Math<'a>> {
+fn maths<'a>(index: &'a Index, source: &'a str) -> Vec<latex_reader::Math<'a>> {
     index
         .events(source)
         .filter_map(|s| match s.event {
@@ -48,19 +48,20 @@ fn maths<'a>(index: &'a Index, source: &'a str) -> Vec<latex_preview::Math<'a>> 
 
 #[test]
 fn global_assignments_survive_groups_and_preamble_groups_stay_local() {
-    // The cases in bench/latex/scoping.tex, checked with pdfLaTeX.
+    // The cases in tests/fixtures/scoping.tex, checked with pdfLaTeX.
     let source = r"\documentclass{article}
 {\newcommand{\grouped}{x}}
+\begingroup\def\inner{x}\endgroup \bgroup\def\inner{x}\egroup
 \def\x{a}{\gdef\x{b}}
 \def\y{a}{\def\y{c}\gdef\y{b}}
 \begin{document}
-\x\y \grouped
+\x\y \grouped \inner
 \end{document}";
     let index = build(source);
     let out = text(source);
     assert!(out.starts_with("bb"), "{out}");
     assert!(
-        out.contains("\\grouped"),
+        out.contains("\\grouped") && out.contains("\\inner"),
         "an undefined command stays visible: {out}"
     );
     assert!(
@@ -285,7 +286,7 @@ fn sections_theorems_and_numberwithin_number_like_latex() {
         });
     assert_eq!(
         theorem,
-        Some((Some("1.2".into()), latex_preview::TheoremStyle::Definition))
+        Some((Some("1.2".into()), latex_reader::TheoremStyle::Definition))
     );
 }
 
@@ -333,7 +334,7 @@ fn included_files_share_the_document_state() {
         "part.tex" => Some("\\section{B}\\label{b}Text $\\R$, after \\ref{a}.".to_owned()),
         _ => None,
     };
-    let expanded = latex_preview::expand(main, None, &Default::default(), &mut read);
+    let expanded = latex_reader::expand(main, None, &Default::default(), &mut read);
     assert_eq!(expanded.files, ["defs.tex", "part.tex"]);
     assert_eq!(expanded.missing, ["gone.py"]);
     let source = expanded.text.as_ref();
@@ -343,7 +344,7 @@ fn included_files_share_the_document_state() {
     assert!(maths[0].context.bindings().any(|b| &*b.name == "\\R"));
     let listing = events(&index, source)
         .into_iter()
-        .find(|s| matches!(&s.event, Event::Include(i) if i.kind == latex_preview::IncludeKind::Listing))
+        .find(|s| matches!(&s.event, Event::Include(i) if i.kind == latex_reader::IncludeKind::Listing))
         .unwrap();
     assert_eq!(&source[listing.range], "\\lstinputlisting{gone.py}");
     assert_eq!(index.diagnostics().total(), 0);

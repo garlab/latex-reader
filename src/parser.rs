@@ -26,7 +26,7 @@ use crate::{
 };
 
 const CANCEL_INTERVAL: usize = 64 * 1024;
-const SYNTHETIC_TITLE: &str = "latexpreviewtitlepart";
+const SYNTHETIC_TITLE: &str = "latexreadertitlepart";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Phase {
@@ -1697,6 +1697,11 @@ impl<'a> Parser<'a> {
                 }
             }
             Special::And => self.line_break(range),
+            // Scoped like braces, which is all a reader needs from them.
+            Special::Group(true) => {
+                self.push_frame(FrameKind::Brace);
+            }
+            Special::Group(false) => self.close_group(range),
             Special::Verb => self.verb(range),
             Special::LstInline => {
                 self.optional();

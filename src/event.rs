@@ -269,7 +269,7 @@ pub struct Reference<'a> {
 
 impl Reference<'_> {
     /// Text to show: the number, in parentheses for `\eqref`, or the label in
-    /// brackets when unresolved. Page numbers do not exist in a preview.
+    /// brackets when unresolved. Page numbers do not exist without typesetting.
     pub fn display(&self) -> String {
         match (&self.resolved, self.kind) {
             (Some(number), RefKind::Eqref) => format!("({number})"),

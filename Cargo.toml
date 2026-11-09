@@ -1,13 +1,16 @@
 [package]
-name = "latex-preview"
+name = "latex-reader"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.90"
-description = "Fast, approximate reading of LaTeX documents: semantic events with source ranges, scoped macros, numbering and resumable checkpoints."
+description = "Reads LaTeX documents into semantic events with source ranges: numbering, references, scoped macros, and formulas prepared for KaTeX, without a TeX engine."
 license = "MIT"
-keywords = ["latex", "tex", "preview", "parser"]
+readme = "README.md"
+documentation = "https://docs.rs/latex-reader"
+repository = "https://github.com/garlab/latex-reader"
+keywords = ["latex", "tex", "parser", "katex", "document"]
 categories = ["parser-implementations", "text-processing"]
-publish = false
+include = ["src/**", "tests/**", "examples/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [dependencies]
 

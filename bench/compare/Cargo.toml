@@ -1,0 +1,16 @@
+[package]
+name = "latex-parser-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Measures other LaTeX parsers and KaTeX coverage, for comparison with latex-reader."
+
+# Standalone tool: not part of the latex-reader package.
+[workspace]
+
+[dependencies]
+codebook-tree-sitter-latex = "=0.6.1"
+katex-native = "=0.1.1"
+mitex-parser = "=0.2.4"
+mitex-spec-gen = "=0.2.4"
+tree-sitter = "=0.25.10"

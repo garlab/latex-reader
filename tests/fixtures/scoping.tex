@@ -1,0 +1,37 @@
+% Reference behavior for macro scoping and label placement; see
+% docs/design.md. Compile outside the repository with
+%   pdflatex -interaction=nonstopmode -no-shell-escape scoping.tex
+% then compare the RESULT lines in the log and the \newlabel lines in the .aux
+% file with the expectations below.
+\documentclass{article}
+\usepackage{amsmath}
+% A definition inside an explicit preamble group stays local.
+{\newcommand{\grouped}{x}}
+% A global assignment inside a group survives the group.
+\def\x{a}{\gdef\x{b}}
+% Including after a local assignment to the same name in that group.
+\def\y{a}{\def\y{c}\gdef\y{b}}
+\begin{document}
+\setcounter{section}{6}
+\section{Seven}
+\setcounter{equation}{40}
+% A label on an unnumbered row binds to the next numbered row: 41.
+\begin{align}
+a &= b \notag \label{pending} \\
+c &= d
+\end{align}
+% A label on a final unnumbered row stays undefined: no \newlabel.
+\begin{align}
+e &= f \\
+g &= h \notag \label{trailing}
+\end{align}
+% A label in an unnumbered environment binds to the current label, which
+% LaTeX sets locally: the section (7), not the equations numbered above.
+\begin{equation*}
+k = l \label{starred}
+\end{equation*}
+\typeout{RESULT x=\x}% b
+\typeout{RESULT y=\y}% b
+\ifdefined\grouped \typeout{RESULT grouped=defined}%
+\else \typeout{RESULT grouped=undefined}\fi% undefined
+\end{document}

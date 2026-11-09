@@ -30,6 +30,8 @@ pub(crate) enum Cmd {
 pub(crate) enum Special {
     Begin,
     End,
+    /// `\begingroup` or `\bgroup` (true), `\endgroup` or `\egroup` (false).
+    Group(bool),
     Item,
     Label,
     Ref(RefKind),
@@ -68,8 +70,12 @@ pub(crate) enum Special {
     NewCommand,
     RenewCommand,
     ProvideCommand,
-    Def { global: bool },
-    Let { global: bool },
+    Def {
+        global: bool,
+    },
+    Let {
+        global: bool,
+    },
     Global,
     Prefix,
     DeclareMathOperator,
@@ -336,6 +342,8 @@ pub(crate) fn command(name: &str) -> Option<Spec> {
         "author" => spec(Special(S::Author), ""),
         "date" => spec(Special(S::Date), ""),
         "and" | "AND" | "And" => spec(Special(S::And), ""),
+        "begingroup" | "bgroup" => spec(Special(S::Group(true)), ""),
+        "endgroup" | "egroup" => spec(Special(S::Group(false)), ""),
         "verb" => spec(Special(S::Verb), ""),
         "lstinline" => spec(Special(S::LstInline), ""),
         "mintinline" => spec(Special(S::MintInline), ""),

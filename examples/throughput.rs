@@ -3,7 +3,7 @@
 
 use std::{sync::atomic::AtomicBool, time::Instant};
 
-use latex_preview::Options;
+use latex_reader::Options;
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -16,7 +16,7 @@ fn main() {
     let mut events;
     for _ in 0..runs {
         let start = Instant::now();
-        let index = latex_preview::index(&source, &Options::default(), &cancel).unwrap();
+        let index = latex_reader::index(&source, &Options::default(), &cancel).unwrap();
         first.push(start.elapsed().as_secs_f64());
         let start = Instant::now();
         events = index.events(&source).count();

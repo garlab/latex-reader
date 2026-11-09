@@ -1,4 +1,5 @@
-//! Fast, approximate reading of LaTeX documents for previews.
+//! Reads LaTeX documents into semantic events, as LaTeX would number and
+//! reference them, without a TeX engine.
 //!
 //! [`index`] reads a document once and returns an [`Index`]: macro bindings
 //! with TeX's scoping, equation and section numbers, labels, an outline, and
@@ -7,10 +8,10 @@
 //!
 //! ```
 //! use std::sync::atomic::AtomicBool;
-//! use latex_preview::{Event, Options, Tag};
+//! use latex_reader::{Event, Options, Tag};
 //!
 //! let source = r"\section{Intro} Let $x \in \mathbb{R}$.";
-//! let index = latex_preview::index(source, &Options::default(), &AtomicBool::new(false)).unwrap();
+//! let index = latex_reader::index(source, &Options::default(), &AtomicBool::new(false)).unwrap();
 //! let events: Vec<_> = index.events(source).map(|s| s.event).collect();
 //! assert!(matches!(&events[0], Event::Start(Tag::Heading { level: 2, number: Some(n) }) if n == "1"));
 //! ```
@@ -38,3 +39,8 @@ pub use event::*;
 pub use index::{Cancelled, Checkpoint, Events, Index, Limits, Options, OutlineEntry, index};
 pub use inputs::{Expanded, InputKind, InputLimits, expand};
 pub use macros::{Binding, BindingKind, MacroContext};
+
+/// The README's examples run as documentation tests.
+#[doc = include_str!("../README.md")]
+#[cfg(doctest)]
+pub struct ReadmeDoctests;
