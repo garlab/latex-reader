@@ -17,12 +17,15 @@
 //!
 //! The crate does not render or read files. Formulas come out as TeX prepared
 //! for KaTeX, with a [`MacroContext`] that identifies the macro bindings
-//! visible where each formula starts.
+//! visible where each formula starts. [`expand`] splices files named by
+//! `\input` and similar commands into the text before indexing, reading them
+//! through a callback that keeps the application's path policy.
 
 mod commands;
 mod diagnostics;
 mod event;
 mod index;
+mod inputs;
 mod lexer;
 mod macros;
 mod math;
@@ -33,4 +36,5 @@ mod text;
 pub use diagnostics::{Diagnostic, DiagnosticKind, Diagnostics};
 pub use event::*;
 pub use index::{Cancelled, Checkpoint, Events, Index, Limits, Options, OutlineEntry, index};
+pub use inputs::{Expanded, InputKind, InputLimits, expand};
 pub use macros::{Binding, BindingKind, MacroContext};

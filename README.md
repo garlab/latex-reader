@@ -4,7 +4,7 @@ Fast, approximate reading of LaTeX documents for previews. The crate reads a
 document once and reports semantic events with source ranges: headings,
 paragraphs, lists, theorems, tables, figures, footnotes, references, code, and
 formulas prepared for [KaTeX](https://katex.org). It does not execute TeX,
-render, or read files. Applications own layout, caches, file resolution, and
+render, or read files. Applications own layout, caches, file access, and
 revision publication.
 
 Status: early. The API is not stable and the crate is not published.
@@ -82,6 +82,25 @@ and escapes decoded. User macros expand in text, with optional arguments;
 `verbatim`, `lstlisting` (with `language=`), `minted`, and `\verb` keep their
 content literal. `comment` environments and `\iffalse` blocks are hidden.
 
+## Included files
+
+`expand` replaces `\input`, `\include` (honoring `\includeonly`), `\subfile`,
+and the `import` package's commands with the text of the files they name, before
+indexing, so included text shares macros, counters, and labels. `\endinput`
+stops a file after its line. `\lstinputlisting`, `\VerbatimInput`,
+`\verbatiminput`, and `\inputminted` become code environments, with
+`firstline`, `lastline`, and `linerange`. `\bibliography` reads the main file's
+`.bbl` when one exists. Comments and verbatim content are skipped.
+
+The application reads files through a callback and keeps its own path policy.
+Paths are relative to the main file's directory, as in LaTeX; names without an
+extension try `.tex` first. File names may use macros whose bodies are plain
+text, and `\IfFileExists` selects the branch whose definitions apply. Missing
+files, cycles, nesting deeper than 15 files, and expansion beyond 256 reads or
+64 MiB leave the command in place; the index reports it as an `Include` event.
+Event ranges then refer to the expanded text, which the application keeps
+alongside the original source.
+
 ## Unknown input
 
 Every command and environment belongs to an explicit class: mapped to events,
@@ -102,8 +121,8 @@ the size limit makes later equation numbers uncertain, shown as `?`, until a
 counter reset.
 
 Not yet supported: spilling checkpoints to disk past a memory cap, splitting
-paragraphs or formulas larger than the replay budget, `\input` resolution,
-BibTeX, and `\theequation` redefinitions.
+paragraphs or formulas larger than the replay budget, BibTeX databases without
+a `.bbl` file, and `\theequation` redefinitions.
 
 ## Performance
 

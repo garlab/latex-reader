@@ -326,6 +326,32 @@ fn unknown_input_stays_visible_and_is_diagnosed() {
 }
 
 #[test]
+fn included_files_share_the_document_state() {
+    let main = "\\documentclass{article}\\begin{document}\n\\input{defs}\n\\section{A}\\label{a}\n\\include{part}\nSee \\ref{b}.\n\\lstinputlisting{gone.py}\n\\end{document}";
+    let mut read = |path: &str, _| match path {
+        "defs.tex" => Some("\\newcommand{\\R}{\\mathbb{R}}".to_owned()),
+        "part.tex" => Some("\\section{B}\\label{b}Text $\\R$, after \\ref{a}.".to_owned()),
+        _ => None,
+    };
+    let expanded = latex_preview::expand(main, None, &Default::default(), &mut read);
+    assert_eq!(expanded.files, ["defs.tex", "part.tex"]);
+    assert_eq!(expanded.missing, ["gone.py"]);
+    let source = expanded.text.as_ref();
+    let index = build(source);
+    assert_eq!(text(source), "ABText $\\R$, after 1.\nSee 2.\n");
+    let maths = maths(&index, source);
+    assert!(maths[0].context.bindings().any(|b| &*b.name == "\\R"));
+    let listing = events(&index, source)
+        .into_iter()
+        .find(|s| matches!(&s.event, Event::Include(i) if i.kind == latex_preview::IncludeKind::Listing))
+        .unwrap();
+    assert_eq!(&source[listing.range], "\\lstinputlisting{gone.py}");
+    assert_eq!(index.diagnostics().total(), 0);
+    let index = build("\\graphicspath{{figures/}{ img/ }}\\includegraphics{plot}");
+    assert_eq!(index.graphics_path(), ["figures/", "img/"]);
+}
+
+#[test]
 fn verbatim_keeps_content_literal() {
     let source = "a\n\\begin{verbatim}\nraw { $ % \\end{itemize}\n\\end{verbatim}\n\\verb|a{b$| c";
     let out = text(source);

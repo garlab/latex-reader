@@ -119,6 +119,7 @@ pub(crate) struct Builder {
     pub bibliography: HashMap<String, String>,
     pub registry: Registry,
     pub title: [Option<String>; 3],
+    pub graphics_path: Vec<String>,
     pub diagnostics: Diagnostics,
     outline: Vec<OutlineEntry>,
     heading: Option<OutlineEntry>,
@@ -136,6 +137,7 @@ impl Builder {
             bibliography: HashMap::new(),
             registry: Registry::new(false),
             title: [None, None, None],
+            graphics_path: Vec::new(),
             diagnostics: Diagnostics::new(limits.max_diagnostics),
             outline: Vec::new(),
             heading: None,
@@ -201,6 +203,7 @@ pub struct Index {
     pub(crate) bibliography: HashMap<String, String>,
     pub(crate) registry: Registry,
     pub(crate) title: [Option<String>; 3],
+    graphics_path: Vec<String>,
     diagnostics: Diagnostics,
     outline: Vec<OutlineEntry>,
     stopped: Option<usize>,
@@ -247,6 +250,7 @@ pub fn index(source: &str, options: &Options, cancel: &AtomicBool) -> Result<Ind
         bibliography: builder.bibliography,
         registry: builder.registry,
         title: builder.title,
+        graphics_path: builder.graphics_path,
         diagnostics: builder.diagnostics,
         outline: builder.outline,
         stopped: builder.stopped,
@@ -286,6 +290,12 @@ impl Index {
     /// The document has a `\title`, so `\maketitle` produces a title block.
     pub fn has_title(&self) -> bool {
         self.title[0].is_some()
+    }
+
+    /// Directories from the last `\graphicspath`, which images are also
+    /// searched in after the document's directory.
+    pub fn graphics_path(&self) -> &[String] {
+        &self.graphics_path
     }
 
     /// The document defines chapters, so sections are one level deeper.

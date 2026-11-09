@@ -38,6 +38,7 @@ pub(crate) enum Special {
     Href,
     Url,
     IncludeGraphics,
+    GraphicsPath,
     Caption,
     MakeTitle,
     Title,
@@ -181,7 +182,6 @@ pub(crate) fn command(name: &str) -> Option<Spec> {
         | "pagenumbering"
         | "bibliographystyle"
         | "hypersetup"
-        | "graphicspath"
         | "geometry"
         | "color"
         | "pagecolor"
@@ -329,6 +329,7 @@ pub(crate) fn command(name: &str) -> Option<Spec> {
         "href" => spec(Special(S::Href), ""),
         "url" | "nolinkurl" => spec(Special(S::Url), ""),
         "includegraphics" => spec(Special(S::IncludeGraphics), ""),
+        "graphicspath" => spec(Special(S::GraphicsPath), ""),
         "caption" | "captionof" => spec(Special(S::Caption), ""),
         "maketitle" => spec(Special(S::MakeTitle), ""),
         "title" => spec(Special(S::Title), ""),
@@ -338,7 +339,10 @@ pub(crate) fn command(name: &str) -> Option<Spec> {
         "verb" => spec(Special(S::Verb), ""),
         "lstinline" => spec(Special(S::LstInline), ""),
         "mintinline" => spec(Special(S::MintInline), ""),
-        "input" | "subfile" | "import" => spec(Special(S::Include(IncludeKind::Input)), ""),
+        "input" | "subfile" | "import" | "subimport" | "inputfrom" | "subinputfrom"
+        | "includefrom" | "subincludefrom" => spec(Special(S::Include(IncludeKind::Input)), ""),
+        "lstinputlisting" | "VerbatimInput" | "BVerbatimInput" | "LVerbatimInput"
+        | "verbatiminput" | "inputminted" => spec(Special(S::Include(IncludeKind::Listing)), ""),
         "include" => spec(Special(S::Include(IncludeKind::Include)), ""),
         "bibliography" => spec(Special(S::Include(IncludeKind::Bibliography)), ""),
         "bibitem" => spec(Special(S::BibItem), ""),

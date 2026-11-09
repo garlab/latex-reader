@@ -311,9 +311,12 @@ pub struct Image<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum IncludeKind {
+    /// `\input`, `\subfile`, and `\import`.
     Input,
     Include,
     Bibliography,
+    /// A file shown as code, such as `\lstinputlisting`.
+    Listing,
 }
 
 #[derive(Clone, Debug, PartialEq)]

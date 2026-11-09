@@ -1317,6 +1317,10 @@ impl<'a> Parser<'a> {
             Cmd::Section(level) => self.section(level, range),
             Cmd::Hint(hint) => {
                 self.skip_args(spec.args);
+                if hint == crate::Hint::PageBreak {
+                    // `\newpage` ends the paragraph first.
+                    self.par(range.clone());
+                }
                 if body {
                     self.emit(Event::Hint(hint), range);
                 }
@@ -1661,6 +1665,22 @@ impl<'a> Parser<'a> {
                     self.inline(Event::Image(Image { path, options }), range);
                 }
             }
+            Special::GraphicsPath => {
+                if let Some((dirs, _)) = self.group()
+                    && let Some(builder) = self.building()
+                {
+                    let dirs = dirs.as_str();
+                    builder.graphics_path = if dirs.contains('{') {
+                        dirs.split(['{', '}'])
+                            .map(str::trim)
+                            .filter(|d| !d.is_empty())
+                            .map(str::to_owned)
+                            .collect()
+                    } else {
+                        vec![dirs.trim().to_owned()]
+                    };
+                }
+            }
             Special::Caption => self.caption(name, range),
             Special::MakeTitle => self.make_title(range),
             Special::Title | Special::Author | Special::Date => {
@@ -1700,13 +1720,26 @@ impl<'a> Parser<'a> {
                 }
             }
             Special::Include(kind) => {
-                if name.as_str() == "import" {
-                    self.group();
+                let mut dir = None;
+                if kind == IncludeKind::Listing {
+                    self.star();
+                    self.optional();
+                    if name.as_str() == "inputminted" {
+                        self.group();
+                    }
+                } else if name.as_str().contains("import") || name.as_str().ends_with("from") {
+                    self.star();
+                    dir = self.group().map(|(dir, _)| dir.trimmed());
                 }
-                if let Some((path, _)) = self.group()
+                if let Some((path, span)) = self.group()
                     && body
                 {
-                    let path = path.trimmed();
+                    let path = match dir {
+                        Some(dir) => Cow::Owned(format!("{dir}{}", path.trimmed())),
+                        None => path.trimmed(),
+                    };
+                    // The range covers the arguments, so the command shows as written.
+                    let range = range.start..span.end.max(range.end);
                     self.emit(Event::Include(Include { kind, path }), range);
                 }
             }

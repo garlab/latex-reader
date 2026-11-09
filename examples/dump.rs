@@ -1,4 +1,5 @@
-//! Prints a document's events, outline, and diagnostics:
+//! Prints a document's events, outline, and diagnostics, with included files
+//! in place:
 //! `cargo run --example dump -- paper.tex`.
 
 use std::sync::atomic::AtomicBool;
@@ -8,6 +9,19 @@ use latex_preview::{Event, Options};
 fn main() {
     let path = std::env::args().nth(1).expect("a .tex file");
     let source = std::fs::read_to_string(&path).expect("readable UTF-8");
+    // Included files resolve against the main file's directory, as in LaTeX.
+    let path = std::path::Path::new(&path);
+    let dir = path.parent().unwrap_or(std::path::Path::new(""));
+    let jobname = path.file_stem().and_then(|s| s.to_str());
+    let mut read = |name: &str, _| std::fs::read_to_string(dir.join(name)).ok();
+    let expanded = latex_preview::expand(&source, jobname, &Default::default(), &mut read);
+    if !expanded.files.is_empty() || !expanded.missing.is_empty() {
+        eprintln!(
+            "included {:?}, missing {:?}",
+            expanded.files, expanded.missing
+        );
+    }
+    let source = expanded.text;
     let index = latex_preview::index(&source, &Options::default(), &AtomicBool::new(false))
         .expect("not cancelled");
     let mut depth = 0usize;
