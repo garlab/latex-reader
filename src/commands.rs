@@ -126,7 +126,7 @@ pub(crate) fn command(name: &str) -> Option<Spec> {
         "textcolor" | "colorbox" => spec(Transparent, "omm"),
         "fcolorbox" => spec(Transparent, "ommm"),
         "makebox" | "framebox" => spec(Transparent, "oom"),
-        "shortstack" => spec(Transparent, "om"),
+        "shortstack" | "hyperref" => spec(Transparent, "om"),
         "multirow" => spec(Transparent, "momom"),
         "parbox" => spec(Transparent, "ooomm"),
         "raisebox" => spec(Transparent, "moom"),

@@ -384,6 +384,12 @@ fn citations_resolve_against_the_bibliography() {
     assert!(text(source).starts_with("See [1, X, p.\u{a0}2]."));
     let source = r"See \cite[\S 3.1, pp.~3--5 \unknown]{a}.";
     assert_eq!(text(source), "See [a, §3.1, pp.\u{a0}3–5 \\unknown].\n");
+    // BibTeX's alpha style marks extra authors with a macro from the .bbl.
+    let source = r"\cite[Lemma~\texttt{x-y}]{k} \cite{k}.
+\begin{thebibliography}{9}
+\bibitem[VSP{\etalchar{+}}17]{k} Paper.
+\end{thebibliography}";
+    assert!(text(source).starts_with("[VSP+17, Lemma\u{a0}x-y] [VSP+17]."));
 }
 
 #[test]

@@ -2632,7 +2632,7 @@ impl<'a> Parser<'a> {
         self.close_inline();
         let at = range.start..range.start;
         if bib {
-            let label = self.optional().map(|(l, _)| l.as_str().trim().to_owned());
+            let label = self.optional().map(|(l, _)| note_text(l.as_str()));
             let key = self.group().map(|(k, _)| k.as_str().trim().to_owned());
             let FrameKind::Env(_, Env::Bibliography { count, item }) =
                 &mut self.st.stack[index].kind
@@ -3360,9 +3360,10 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Converts a short text argument, such as a citation note, without events:
-/// symbols and ligatures become characters, groups disappear, and other
-/// commands stay as written.
+/// Converts a short text argument, such as a citation note or a bibliography
+/// label, without events: symbols and ligatures become characters, groups
+/// disappear, styles and other commands with a braced argument keep only the
+/// argument's text, and commands without one stay as written.
 fn note_text(note: &str) -> String {
     let note = note.trim();
     let mut out = String::with_capacity(note.len());
@@ -3397,14 +3398,20 @@ fn note_text(note: &str) -> String {
                     continue;
                 }
                 let name = &note[start..end];
-                match commands::command(name).map(|spec| spec.cmd) {
-                    Some(Cmd::Symbol(text)) => {
+                let text = match commands::command(name).map(|spec| spec.cmd) {
+                    Some(Cmd::Symbol(text)) => Some(text),
+                    Some(Cmd::Style(_) | Cmd::Declare(_) | Cmd::Transparent) => Some(""),
+                    _ if note[end..].starts_with('{') => Some(""),
+                    _ => None,
+                };
+                match text {
+                    Some(text) => {
                         out.push_str(text);
                         while chars.peek().is_some_and(|&(_, d)| d.is_whitespace()) {
                             chars.next();
                         }
                     }
-                    _ => out.push_str(&note[i..end]),
+                    None => out.push_str(&note[i..end]),
                 }
             }
             c => out.push(c),
