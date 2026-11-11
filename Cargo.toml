@@ -1,6 +1,6 @@
 [package]
 name = "latex-reader"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.90"
 description = "Reads LaTeX documents into semantic events with source ranges: numbering, references, scoped macros, and formulas prepared for KaTeX, without a TeX engine."
