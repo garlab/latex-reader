@@ -161,3 +161,9 @@ unresolved, shown as the key in brackets.
 - Resuming the first pass after an edit from the last unaffected checkpoint.
 - Redefined `\theequation`, BibTeX databases without a `.bbl` file, and package
   coverage beyond the command tables.
+
+Input expansion also returns a compact root-source map. Unchanged spans map
+byte for byte; inserted files, including nested inputs, map to the invoking root
+command. The number of root replacements is bounded by `InputLimits::max_files`.
+`expand_cancellable` checks between tokens and before file callbacks; the host
+is responsible for bounding and cancelling work inside its callback.

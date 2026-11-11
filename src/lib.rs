@@ -37,7 +37,7 @@ mod text;
 pub use diagnostics::{Diagnostic, DiagnosticKind, Diagnostics};
 pub use event::*;
 pub use index::{Cancelled, Checkpoint, Events, Index, Limits, Options, OutlineEntry, index};
-pub use inputs::{Expanded, InputKind, InputLimits, expand};
+pub use inputs::{Expanded, InputKind, InputLimits, InputSourceMap, expand, expand_cancellable};
 pub use macros::{Binding, BindingKind, MacroContext};
 
 /// The README's examples run as documentation tests.

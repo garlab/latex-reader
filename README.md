@@ -93,7 +93,11 @@ stale definition.
 share macros, counters, and labels. `\lstinputlisting`, `\VerbatimInput`, and
 `\inputminted` become code, with `firstline` and `lastline`, and `\bibliography`
 reads the main file's `.bbl` when BibTeX has produced one. Event ranges then
-refer to the expanded text; keep the original source for exact copies.
+refer to the expanded text. `Expanded::source_map` translates offsets in either
+direction: unchanged root text maps exactly, and inserted content maps to its
+root include command. Keep the original source for exact copies.
+`expand_cancellable` accepts the same cancellation flag as `index`; cancelled
+expansions return `Err(Cancelled)` and must not be published.
 
 ```rust
 use std::{collections::HashMap, sync::atomic::AtomicBool};

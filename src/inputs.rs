@@ -7,7 +7,12 @@
 //! the application supplies them through a callback and keeps its own path
 //! policy. Event ranges then refer to the expanded text.
 
-use std::{borrow::Cow, collections::HashMap};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ops::Range,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use crate::{
     commands::{self, EnvClass},
@@ -60,6 +65,62 @@ pub struct Expanded<'a> {
     pub files: Vec<String>,
     /// For each command that stayed in the text, the first path tried.
     pub missing: Vec<String>,
+    /// Maps expanded offsets back to the root source. Included content maps to
+    /// the command that inserted it; unchanged root text maps byte for byte.
+    pub source_map: InputSourceMap,
+}
+
+/// Root-source coordinates for an expanded document. This does not retain
+/// either text, and does not choose a host's file-opening or editing policy.
+#[derive(Clone, Debug, Default)]
+pub struct InputSourceMap {
+    segments: Vec<InputSegment>,
+    source_len: usize,
+    expanded_len: usize,
+}
+#[derive(Clone, Debug)]
+struct InputSegment {
+    source: Range<usize>,
+    expanded: Range<usize>,
+    exact: bool,
+}
+impl InputSourceMap {
+    /// Translate an expanded byte offset to the root document. Offsets within
+    /// inserted content resolve to the start of its root include command.
+    pub fn source_offset(&self, expanded: usize) -> usize {
+        let at = expanded.min(self.expanded_len);
+        if self.segments.is_empty() {
+            return at.min(self.source_len);
+        }
+        let i = self.segments.partition_point(|s| s.expanded.end <= at);
+        self.segments.get(i).map_or(self.source_len, |s| {
+            if s.exact {
+                s.source.start + at.saturating_sub(s.expanded.start)
+            } else {
+                s.source.start
+            }
+        })
+    }
+    /// Translate a root byte offset to the expanded document. Offsets within
+    /// a replaced command resolve to the start of its inserted content.
+    pub fn expanded_offset(&self, source: usize) -> usize {
+        let at = source.min(self.source_len);
+        if self.segments.is_empty() {
+            return at.min(self.expanded_len);
+        }
+        let i = self.segments.partition_point(|s| s.source.end <= at);
+        self.segments.get(i).map_or(self.expanded_len, |s| {
+            if s.exact {
+                s.expanded.start + at.saturating_sub(s.source.start)
+            } else {
+                s.expanded.start
+            }
+        })
+    }
+    /// Heap storage retained by this map, excluding the map value itself.
+    pub fn retained_bytes(&self) -> usize {
+        self.segments.capacity() * std::mem::size_of::<InputSegment>()
+    }
 }
 
 /// Replaces include commands with the text of the files they name.
@@ -75,6 +136,36 @@ pub fn expand<'a>(
     limits: &InputLimits,
     read: &mut dyn FnMut(&str, InputKind) -> Option<String>,
 ) -> Expanded<'a> {
+    expand_inner(source, jobname, limits, read, None)
+}
+
+/// Like [`expand`], with cooperative cancellation during scanning and before
+/// file callbacks. A cancelled expansion must not be published.
+pub fn expand_cancellable<'a>(
+    source: &'a str,
+    jobname: Option<&str>,
+    limits: &InputLimits,
+    cancel: &AtomicBool,
+    read: &mut dyn FnMut(&str, InputKind) -> Option<String>,
+) -> Result<Expanded<'a>, crate::Cancelled> {
+    if cancel.load(Ordering::Relaxed) {
+        return Err(crate::Cancelled);
+    }
+    let result = expand_inner(source, jobname, limits, read, Some(cancel));
+    if cancel.load(Ordering::Relaxed) {
+        Err(crate::Cancelled)
+    } else {
+        Ok(result)
+    }
+}
+
+fn expand_inner<'a>(
+    source: &'a str,
+    jobname: Option<&str>,
+    limits: &InputLimits,
+    read: &mut dyn FnMut(&str, InputKind) -> Option<String>,
+    cancel: Option<&AtomicBool>,
+) -> Expanded<'a> {
     let mut expander = Expander {
         jobname,
         limits: *limits,
@@ -86,19 +177,29 @@ pub fn expand<'a>(
         open: Vec::new(),
         only: None,
         macros: HashMap::new(),
+        macro_bytes: 0,
+        cancel,
+        source_map: InputSourceMap {
+            source_len: source.len(),
+            ..Default::default()
+        },
     };
     let text = match expander.splice(source, "", 0) {
         Some(text) => Cow::Owned(text),
         None => Cow::Borrowed(source),
     };
+    expander.source_map.expanded_len = text.len();
     Expanded {
+        source_map: expander.source_map,
         text,
         files: expander.files,
         missing: expander.missing,
     }
 }
 
-struct Expander<'r, 'j> {
+struct Expander<'r, 'j, 'c> {
+    cancel: Option<&'c AtomicBool>,
+    source_map: InputSourceMap,
     jobname: Option<&'j str>,
     limits: InputLimits,
     read: &'r mut dyn FnMut(&str, InputKind) -> Option<String>,
@@ -114,7 +215,13 @@ struct Expander<'r, 'j> {
     /// Macros without arguments whose bodies are plain text, for file names
     /// such as `\input{\dir/part}`.
     macros: HashMap<String, String>,
+    macro_bytes: usize,
 }
+
+// Filename substitution must not turn a small repeated macro into a huge path.
+const MAX_PATH_BYTES: usize = 32 * 1024;
+const MAX_FILENAME_MACROS: usize = 4096;
+const MAX_FILENAME_MACRO_BYTES: usize = 256 * 1024;
 
 /// A command's replacement and where the command ends.
 struct Splice {
@@ -122,7 +229,7 @@ struct Splice {
     end: usize,
 }
 
-impl Expander<'_, '_> {
+impl Expander<'_, '_, '_> {
     /// The expanded text, or `None` if nothing changed. `dir` prefixes paths
     /// inside files reached through `\import`.
     fn splice(&mut self, text: &str, dir: &str, depth: usize) -> Option<String> {
@@ -133,6 +240,13 @@ impl Expander<'_, '_> {
         // The branch of `\IfFileExists` that is not taken.
         let mut skip: Option<(usize, usize)> = None;
         loop {
+            if self.cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+                return None;
+            }
+            // Also bound replacements which do not read a file (includeonly).
+            if depth == 0 && self.source_map.segments.len() / 2 >= self.limits.max_files {
+                break;
+            }
             if let Some((start, end)) = skip
                 && pos >= start
             {
@@ -212,6 +326,20 @@ impl Expander<'_, '_> {
             };
             if let Some(splice) = splice {
                 let out = out.get_or_insert_with(|| String::with_capacity(text.len()));
+                if depth == 0 {
+                    let start = out.len();
+                    let middle = start + token.start - copied;
+                    self.source_map.segments.push(InputSegment {
+                        source: copied..token.start,
+                        expanded: start..middle,
+                        exact: true,
+                    });
+                    self.source_map.segments.push(InputSegment {
+                        source: token.start..splice.end,
+                        expanded: middle..middle + splice.text.len(),
+                        exact: false,
+                    });
+                }
                 out.push_str(&text[copied..token.start]);
                 out.push_str(&splice.text);
                 copied = splice.end;
@@ -220,6 +348,13 @@ impl Expander<'_, '_> {
             }
         }
         let mut out = out?;
+        if depth == 0 {
+            self.source_map.segments.push(InputSegment {
+                source: copied..text.len(),
+                expanded: out.len()..out.len() + text.len() - copied,
+                exact: true,
+            });
+        }
         out.push_str(&text[copied..]);
         Some(out)
     }
@@ -320,6 +455,9 @@ impl Expander<'_, '_> {
     /// A braced file name, with plain-text macros replaced.
     fn path(&self, text: &str, pos: usize) -> Option<(String, usize)> {
         let (raw, _, end) = raw_group(text, pos)?;
+        if raw.len() > MAX_PATH_BYTES {
+            return None;
+        }
         let mut path = String::with_capacity(raw.len());
         let mut rest = raw.trim();
         while let Some(i) = rest.find('\\') {
@@ -328,8 +466,14 @@ impl Expander<'_, '_> {
                 .find(|c: char| !c.is_ascii_alphabetic())
                 .unwrap_or(rest.len() - i - 1);
             let value = self.macros.get(&rest[i + 1..i + 1 + name_len])?;
+            if path.len().checked_add(value.len())? > MAX_PATH_BYTES {
+                return None;
+            }
             path.push_str(value);
             rest = rest[i + 1 + name_len..].trim_start_matches(' ');
+        }
+        if path.len().checked_add(rest.len())? > MAX_PATH_BYTES {
+            return None;
         }
         path.push_str(rest);
         (!path.is_empty()).then_some((path, end))
@@ -361,13 +505,33 @@ impl Expander<'_, '_> {
         };
         // Arguments, or parameter text after `\def\name`, make it a real macro.
         if skip_spaces(text, after) != start || body.contains(['\\', '#']) {
-            self.macros.remove(name);
+            self.remove_definition(name);
             return;
         }
         if command == "providecommand" && self.macros.contains_key(name) {
             return;
         }
+        self.remove_definition(name);
+        let bytes = name.len().saturating_add(body.trim().len());
+        if self.macros.len() >= MAX_FILENAME_MACROS
+            || bytes > MAX_FILENAME_MACRO_BYTES.saturating_sub(self.macro_bytes)
+        {
+            return;
+        }
+        self.macro_bytes += bytes;
         self.macros.insert(name.to_owned(), body.trim().to_owned());
+    }
+
+    fn remove_definition(&mut self, name: &str) {
+        if let Some(body) = self.macros.remove(name) {
+            self.macro_bytes -= name.len() + body.len();
+        }
+    }
+
+    fn missing(&mut self, name: &str) {
+        if self.missing.len() < self.limits.max_files && name.len() <= MAX_PATH_BYTES {
+            self.missing.push(name.to_owned());
+        }
     }
 
     /// Reads a source file and expands it in turn, with `dir` for imports.
@@ -381,12 +545,12 @@ impl Expander<'_, '_> {
         body_only: bool,
     ) -> Option<Splice> {
         if depth >= self.limits.max_depth {
-            self.missing.push(names.first()?.clone());
+            self.missing(names.first()?);
             return None;
         }
         let (path, content) = self.load_named(names, InputKind::Source)?;
         if self.open.contains(&path) {
-            self.missing.push(path);
+            self.missing(&path);
             return None;
         }
         self.open.push(path);
@@ -444,6 +608,12 @@ impl Expander<'_, '_> {
 
     fn load_named(&mut self, names: &[String], kind: InputKind) -> Option<(String, String)> {
         for name in names {
+            if name.len() > MAX_PATH_BYTES {
+                continue;
+            }
+            if self.cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+                return None;
+            }
             if self.reads >= self.limits.max_files {
                 break;
             }
@@ -456,7 +626,7 @@ impl Expander<'_, '_> {
             }
         }
         if let Some(first) = names.first() {
-            self.missing.push(first.clone());
+            self.missing(first);
         }
         None
     }
@@ -762,5 +932,132 @@ mod tests {
         };
         let expanded = expand("\\input{a}", None, &limits, &mut read);
         assert_eq!(expanded.text, "\\input{a}");
+    }
+}
+
+#[cfg(test)]
+mod source_map_tests {
+    use super::*;
+
+    #[test]
+    fn nested_insertions_map_to_root_commands_and_preserve_later_offsets() {
+        let source = "α before \\input{part} after \\input{empty} τέλος";
+        let expanded = expand(
+            source,
+            None,
+            &InputLimits::default(),
+            &mut |path, _| match path {
+                "part.tex" => Some("inserted \\input{nested}".into()),
+                "nested.tex" => Some("nested text".into()),
+                "empty.tex" => Some(String::new()),
+                _ => None,
+            },
+        );
+        let map = &expanded.source_map;
+        let input = source.find("\\input").unwrap();
+        let inserted = expanded.text.find("inserted").unwrap();
+        assert_eq!(map.source_offset(inserted), input);
+        assert_eq!(
+            map.source_offset(expanded.text.find("nested text").unwrap()),
+            input
+        );
+        for needle in ["α", " before", " after", " τέλος"] {
+            let original = source.find(needle).unwrap();
+            let rendered = expanded.text.find(needle).unwrap();
+            for i in 0..needle.len() {
+                assert_eq!(map.source_offset(rendered + i), original + i);
+                assert_eq!(map.expanded_offset(original + i), rendered + i);
+            }
+        }
+        assert_eq!(map.expanded_offset(input + 3), inserted);
+        assert_eq!(map.source_offset(usize::MAX), source.len());
+        assert_eq!(map.expanded_offset(usize::MAX), expanded.text.len());
+    }
+
+    #[test]
+    fn unchanged_and_deleted_segments_map_at_boundaries() {
+        let source = "text \\input{missing}";
+        let expanded = expand(source, None, &InputLimits::default(), &mut |_, _| None);
+        for i in 0..=source.len() {
+            assert_eq!(expanded.source_map.source_offset(i), i);
+            assert_eq!(expanded.source_map.expanded_offset(i), i);
+        }
+        let source = "\\includeonly{}\\include{skip}after";
+        let expanded = expand(source, None, &InputLimits::default(), &mut |_, _| panic!());
+        let before = source.find("\\include{skip}").unwrap();
+        assert_eq!(expanded.source_map.expanded_offset(before), before);
+        assert_eq!(
+            expanded.source_map.source_offset(before),
+            source.find("after").unwrap()
+        );
+        let limits = InputLimits {
+            max_files: 1,
+            ..Default::default()
+        };
+        let expanded = expand(
+            "\\includeonly{}\\include{a}\\include{b}",
+            None,
+            &limits,
+            &mut |_, _| panic!(),
+        );
+        assert!(expanded.text.contains("\\include{b}"));
+        assert!(expanded.source_map.segments.len() <= 3);
+    }
+
+    #[test]
+    fn cancellation_stops_before_another_callback() {
+        let cancel = AtomicBool::new(true);
+        assert!(
+            expand_cancellable(
+                "\\input{one}",
+                None,
+                &InputLimits::default(),
+                &cancel,
+                &mut |_, _| panic!()
+            )
+            .is_err()
+        );
+        cancel.store(false, Ordering::Relaxed);
+        let mut calls = 0;
+        let result = expand_cancellable(
+            "\\input{one}\\input{two}",
+            None,
+            &InputLimits::default(),
+            &cancel,
+            &mut |_, _| {
+                calls += 1;
+                cancel.store(true, Ordering::Relaxed);
+                Some("body".into())
+            },
+        );
+        assert!(result.is_err());
+        assert_eq!(calls, 1);
+    }
+}
+
+#[cfg(test)]
+mod filename_limit_tests {
+    use super::*;
+    #[test]
+    fn huge_paths_and_rejected_redefinitions_do_not_reach_the_loader() {
+        let huge = "x".repeat(MAX_PATH_BYTES);
+        let source = format!(r"\def\dir{{{huge}}}\input{{\dir\dir/file}}\input{{{huge}more}}");
+        let expanded = expand(&source, None, &InputLimits::default(), &mut |_, _| panic!());
+        assert_eq!(expanded.text, source);
+        let huge = "x".repeat(MAX_FILENAME_MACRO_BYTES + 1);
+        let source = format!(r"\def\dir{{old}}\def\dir{{{huge}}}\input{{\dir/file}}");
+        let expanded = expand(&source, None, &InputLimits::default(), &mut |_, _| panic!());
+        assert_eq!(expanded.text, source);
+    }
+    #[test]
+    fn missing_diagnostics_are_bounded() {
+        let source = r"\input{missing}".repeat(1000);
+        let limits = InputLimits {
+            max_files: 2,
+            ..Default::default()
+        };
+        let expanded = expand(&source, None, &limits, &mut |_, _| None);
+        assert_eq!(expanded.text, source);
+        assert_eq!(expanded.missing.len(), 2);
     }
 }
